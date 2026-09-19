@@ -52,6 +52,79 @@ const createExpense = async (req, res) => {
     });
   }
 };
+// ============================================================
+// CREATE BATCH EXPENSES
+// Accepts an array of expenses and inserts them all in one
+// DB transaction. If any single insert fails, the whole batch
+// is rolled back.
+// ============================================================
+const createBatchExpenses = async (req, res) => {
+  const t = await Expense.sequelize.transaction();
+  try {
+    const { userId, expenses: incoming } = req.body;
+
+    if (!userId) throw new Error("User ID is required");
+
+    if (!Array.isArray(incoming) || incoming.length === 0) {
+      throw new Error("No expenses provided");
+    }
+
+    if (incoming.length > 50) {
+      throw new Error("Too many expenses at once (max 50)");
+    }
+
+    // Validate each one and normalize
+    const rows = incoming.map((e, idx) => {
+      const label = `Row ${idx + 1}`;
+
+      if (!e.title || !String(e.title).trim()) {
+        throw new Error(`${label}: title is required`);
+      }
+      if (e.amount === undefined || e.amount === null || e.amount === "") {
+        throw new Error(`${label}: amount is required`);
+      }
+      if (Number(e.amount) <= 0) {
+        throw new Error(`${label}: amount must be greater than 0`);
+      }
+      if (!e.type) throw new Error(`${label}: type is required`);
+      if (!e.category) throw new Error(`${label}: category is required`);
+      if (!e.paymentMethod) throw new Error(`${label}: payment method is required`);
+      if (!e.expenseDate) throw new Error(`${label}: date is required`);
+
+      return {
+        userId,
+        title: String(e.title).trim(),
+        amount: Number(e.amount),
+        type: Number(e.type),
+        category: Number(e.category),
+        paymentMethod: Number(e.paymentMethod),
+        expenseDate: Number(e.expenseDate),
+        description: e.description ? String(e.description).trim() : null,
+        status: 1,
+      };
+    });
+
+    const created = await Expense.bulkCreate(rows, {
+      transaction: t,
+      returning: true,
+    });
+
+    await t.commit();
+
+    return res.status(201).json({
+      success: true,
+      message: `${created.length} expense${created.length > 1 ? "s" : ""} created successfully`,
+      data: created,
+      count: created.length,
+    });
+  } catch (error) {
+    await t.rollback();
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 const getAllExpenses = async (req, res) => {
   try {
@@ -254,4 +327,5 @@ module.exports = {
   getExpenseById,
   updateExpense,
   deleteExpense,
+  createBatchExpenses,
 };

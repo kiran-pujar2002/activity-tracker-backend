@@ -7,6 +7,7 @@ const {
   getExpenseById,
   updateExpense,
   deleteExpense,
+  createBatchExpenses,
   
 } = require("../controllers/expense");
 
@@ -16,6 +17,8 @@ router.use(auth);
 
 // Create expense
 router.post("/create", createExpense);
+
+router.post("/create-batch", createBatchExpenses);
 
 // Get all expenses
 router.post("/list", getAllExpenses);
